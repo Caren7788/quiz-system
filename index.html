@@ -27,11 +27,26 @@
             color: white;
             min-height: 100vh;
             padding: 20px;
+            position: relative;
+            overflow-x: hidden;
         }
         
         .container {
             max-width: 1200px;
             margin: 0 auto;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .deployment-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            z-index: 3;
         }
         
         header {
@@ -49,6 +64,15 @@
         .subtitle {
             font-size: 1.2rem;
             opacity: 0.9;
+            margin-bottom: 15px;
+        }
+        
+        .instructions {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 1rem;
         }
         
         .panel {
@@ -58,6 +82,7 @@
             padding: 25px;
             margin-bottom: 30px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
         }
         
         .panel-title {
@@ -253,6 +278,10 @@
             .player-number {
                 font-size: 2.5rem;
             }
+            
+            h1 {
+                font-size: 2.2rem;
+            }
         }
         
         /* 模式选择器 */
@@ -278,13 +307,49 @@
             background: var(--primary);
             box-shadow: 0 0 15px rgba(52, 152, 219, 0.5);
         }
+        
+        /* 背景装饰 */
+        .bubbles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            overflow: hidden;
+        }
+        
+        .bubble {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            animation: float 15s infinite;
+        }
+        
+        @keyframes float {
+            0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 0.8; }
+            100% { transform: translateY(-1000px) rotate(720deg); opacity: 0; }
+        }
     </style>
 </head>
 <body>
+    <!-- 背景装饰 -->
+    <div class="bubbles" id="bubbles"></div>
+    
+    <!-- 部署信息 -->
+    <div class="deployment-info">
+        <i class="fas fa-cloud-upload-alt"></i> GitHub Pages部署
+    </div>
+    
     <div class="container">
         <header>
             <h1><i class="fas fa-trophy"></i> 8人抢答系统</h1>
             <p class="subtitle">专为多台iPad设备协同设计</p>
+            <div class="instructions">
+                <i class="fas fa-info-circle"></i> 提示：在主持人iPad上选择"主持人模式"，在选手iPad上选择"选手模式"
+            </div>
         </header>
         
         <div class="mode-selector">
@@ -330,4 +395,297 @@
                 <select id="playerSelect" class="player-select">
                     <option value="">-- 选择您的选手号 --</option>
                     <option value="1">选手 1</option>
-                   
+                    <option value="2">选手 2</option>
+                    <option value="3">选手 3</option>
+                    <option value="4">选手 4</option>
+                    <option value="5">选手 5</option>
+                    <option value="6">选手 6</option>
+                    <option value="7">选手 7</option>
+                    <option value="8">选手 8</option>
+                </select>
+            </div>
+            
+            <button id="respondBtn" class="btn start-btn" disabled>
+                <i class="fas fa-bolt"></i> 抢答
+            </button>
+            
+            <div class="result-display" id="playerResultDisplay">
+                请选择您的选手号
+            </div>
+            
+            <div class="connection-status">
+                <i class="fas fa-wifi"></i> 连接状态: <span id="playerConnectionStatus">已连接</span>
+            </div>
+        </div>
+        
+        <div class="instructions" style="margin-top: 30px;">
+            <h3><i class="fas fa-cloud"></i> 部署说明：</h3>
+            <ol>
+                <li>在GitHub创建新仓库，命名为"quiz-system"</li>
+                <li>复制此页面全部代码</li>
+                <li>在仓库中创建文件<strong>index.html</strong>并粘贴代码</li>
+                <li>进入仓库设置 → Pages → 选择main分支 → 保存</li>
+                <li>访问：<span id="githubUrl">https://yourusername.github.io/quiz-system/</span></li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // 系统状态
+        const systemState = {
+            isStarted: false,
+            winner: null,
+            players: Array(8).fill(false),
+            currentPlayerId: null,
+            mode: 'host' // host 或 player
+        };
+
+        // 创建背景气泡
+        function createBubbles() {
+            const bubblesContainer = document.getElementById('bubbles');
+            const bubbleCount = 20;
+            
+            for (let i = 0; i < bubbleCount; i++) {
+                const bubble = document.createElement('div');
+                bubble.classList.add('bubble');
+                
+                // 随机大小和位置
+                const size = Math.random() * 150 + 50;
+                const posX = Math.random() * 100;
+                const delay = Math.random() * 15;
+                const duration = Math.random() * 10 + 15;
+                
+                bubble.style.width = `${size}px`;
+                bubble.style.height = `${size}px`;
+                bubble.style.left = `${posX}%`;
+                bubble.style.animationDelay = `${delay}s`;
+                bubble.style.animationDuration = `${duration}s`;
+                
+                bubblesContainer.appendChild(bubble);
+            }
+        }
+
+        // 初始化函数
+        function initSystem() {
+            // 生成背景气泡
+            createBubbles();
+            
+            // 生成选手卡片
+            generatePlayerCards();
+            
+            // 设置事件监听器
+            document.getElementById('startBtn').addEventListener('click', startGame);
+            document.getElementById('resetBtn').addEventListener('click', resetGame);
+            document.getElementById('respondBtn').addEventListener('click', respond);
+            document.getElementById('playerSelect').addEventListener('change', selectPlayer);
+            document.getElementById('hostBtn').addEventListener('click', () => setMode('host'));
+            document.getElementById('playerBtn').addEventListener('click', () => setMode('player'));
+            
+            // 模拟WebSocket连接状态
+            simulateConnection();
+            
+            // 显示GitHub Pages URL
+            showDeploymentUrl();
+        }
+
+        // 显示部署URL
+        function showDeploymentUrl() {
+            const currentUrl = window.location.href;
+            const urlElement = document.getElementById('githubUrl');
+            
+            if (currentUrl.includes('github.io')) {
+                urlElement.textContent = currentUrl;
+            } else {
+                urlElement.textContent = "https://yourusername.github.io/quiz-system/";
+            }
+        }
+
+        // 生成选手卡片
+        function generatePlayerCards() {
+            const container = document.getElementById('playersContainer');
+            container.innerHTML = '';
+            
+            for (let i = 1; i <= 8; i++) {
+                const playerCard = document.createElement('div');
+                playerCard.className = 'player-card';
+                playerCard.id = `player-${i}`;
+                playerCard.setAttribute('data-player-id', i);
+                playerCard.innerHTML = `
+                    <div class="player-number">${i}</div>
+                    <div class="player-name">选手 ${i}</div>
+                    <div class="player-status">等待</div>
+                `;
+                container.appendChild(playerCard);
+            }
+        }
+
+        // 设置模式
+        function setMode(mode) {
+            systemState.mode = mode;
+            
+            if (mode === 'host') {
+                document.getElementById('hostPanel').style.display = 'block';
+                document.getElementById('playerPanel').style.display = 'none';
+                document.getElementById('hostBtn').classList.add('active');
+                document.getElementById('playerBtn').classList.remove('active');
+            } else {
+                document.getElementById('hostPanel').style.display = 'none';
+                document.getElementById('playerPanel').style.display = 'block';
+                document.getElementById('hostBtn').classList.remove('active');
+                document.getElementById('playerBtn').classList.add('active');
+                
+                // 重置选手选择
+                document.getElementById('playerSelect').value = '';
+                document.getElementById('playerResultDisplay').textContent = '请选择您的选手号';
+                document.getElementById('respondBtn').disabled = true;
+                systemState.currentPlayerId = null;
+            }
+        }
+
+        // 开始游戏
+        function startGame() {
+            if (systemState.isStarted) return;
+            
+            systemState.isStarted = true;
+            systemState.winner = null;
+            systemState.players = Array(8).fill(false);
+            
+            updateUI();
+            
+            // 模拟广播消息
+            broadcastMessage('start');
+        }
+
+        // 重置游戏
+        function resetGame() {
+            systemState.isStarted = false;
+            systemState.winner = null;
+            systemState.players = Array(8).fill(false);
+            
+            updateUI();
+            
+            // 模拟广播消息
+            broadcastMessage('reset');
+        }
+
+        // 选手抢答
+        function respond() {
+            if (!systemState.currentPlayerId || !systemState.isStarted || systemState.winner) return;
+            
+            // 设置抢答成功选手
+            const playerId = systemState.currentPlayerId;
+            systemState.winner = playerId;
+            systemState.players[playerId - 1] = true;
+            
+            // 更新UI
+            updateUI();
+            
+            // 模拟广播消息
+            broadcastMessage('respond', playerId);
+        }
+
+        // 选择选手
+        function selectPlayer(event) {
+            const playerId = parseInt(event.target.value);
+            systemState.currentPlayerId = playerId;
+            
+            if (playerId) {
+                document.getElementById('playerResultDisplay').textContent = `已选择: 选手 ${playerId}`;
+                document.getElementById('respondBtn').disabled = !systemState.isStarted;
+            } else {
+                document.getElementById('playerResultDisplay').textContent = '请选择您的选手号';
+                document.getElementById('respondBtn').disabled = true;
+            }
+        }
+
+        // 更新UI
+        function updateUI() {
+            // 更新主持人界面
+            if (systemState.isStarted) {
+                if (systemState.winner) {
+                    document.getElementById('resultDisplay').innerHTML = `
+                        <div>
+                            <i class="fas fa-trophy"></i> 选手 ${systemState.winner} 抢答成功!
+                        </div>
+                    `;
+                    document.getElementById('resultDisplay').className = 'result-display winner';
+                } else {
+                    document.getElementById('resultDisplay').textContent = '抢答进行中...';
+                    document.getElementById('resultDisplay').className = 'result-display';
+                }
+            } else {
+                document.getElementById('resultDisplay').textContent = '比赛准备中...';
+                document.getElementById('resultDisplay').className = 'result-display';
+            }
+            
+            // 更新选手卡片
+            for (let i = 1; i <= 8; i++) {
+                const playerCard = document.getElementById(`player-${i}`);
+                const statusElement = playerCard.querySelector('.player-status');
+                
+                playerCard.classList.remove('active', 'winner');
+                
+                if (systemState.players[i-1]) {
+                    playerCard.classList.add('active');
+                    statusElement.textContent = '已抢答';
+                    
+                    if (systemState.winner === i) {
+                        playerCard.classList.add('winner');
+                        statusElement.textContent = '抢答成功!';
+                    }
+                } else {
+                    statusElement.textContent = systemState.isStarted ? '等待抢答' : '等待';
+                }
+            }
+            
+            // 更新选手界面
+            if (systemState.mode === 'player') {
+                if (systemState.winner) {
+                    if (systemState.currentPlayerId === systemState.winner) {
+                        document.getElementById('playerResultDisplay').innerHTML = `
+                            <div>
+                                <i class="fas fa-trophy"></i> 恭喜! 您抢答成功!
+                            </div>
+                        `;
+                        document.getElementById('playerResultDisplay').className = 'result-display winner';
+                    } else {
+                        document.getElementById('playerResultDisplay').innerHTML = `
+                            <div>
+                                <i class="fas fa-bolt"></i> 选手 ${systemState.winner} 抢答成功!
+                            </div>
+                        `;
+                        document.getElementById('playerResultDisplay').className = 'result-display';
+                    }
+                } else if (systemState.isStarted) {
+                    document.getElementById('playerResultDisplay').textContent = '可以抢答';
+                    document.getElementById('playerResultDisplay').className = 'result-display';
+                }
+                
+                document.getElementById('respondBtn').disabled = !systemState.isStarted || !!systemState.winner;
+            }
+        }
+
+        // 模拟广播消息
+        function broadcastMessage(type, data = null) {
+            console.log(`广播消息: ${type}`, data);
+            
+            // 在实际系统中，这里会使用WebSocket向所有设备广播消息
+            // 为了演示目的，我们直接更新所有UI状态
+        }
+
+        // 模拟连接状态
+        function simulateConnection() {
+            setInterval(() => {
+                const statusElements = document.querySelectorAll('#connectionStatus, #playerConnectionStatus');
+                statusElements.forEach(el => {
+                    el.textContent = '已连接';
+                    el.style.color = '#2ecc71';
+                });
+            }, 5000);
+        }
+
+        // 页面加载完成后初始化系统
+        window.addEventListener('DOMContentLoaded', initSystem);
+    </script>
+</body>
+</html>
