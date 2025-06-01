@@ -397,13 +397,21 @@
         .qr-code-container {
             text-align: center;
             margin: 20px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 10px;
+            display: inline-block;
         }
         
         #qrcode {
-            display: inline-block;
-            background: white;
-            padding: 10px;
-            border-radius: 10px;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .qr-instruction {
+            margin-top: 10px;
+            color: #2c3e50;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -466,8 +474,8 @@
                 <h3><i class="fas fa-server"></i> 服务器信息</h3>
                 <p>主持人设备：<span id="serverUrl">wss://yourserver.com</span></p>
                 <div class="qr-code-container">
-                    <div id="qrcode"></div>
-                    <p>扫描二维码加入房间</p>
+                    <div id="qrcode">二维码加载中...</div>
+                    <p class="qr-instruction">扫描二维码加入房间</p>
                 </div>
             </div>
         </div>
@@ -513,8 +521,7 @@
         </div>
     </div>
 
-    <!-- 使用免费公共WebSocket服务器 -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <!-- 使用纯JavaScript实现二维码生成 -->
     <script>
         // ========================
         // WebSocket 配置
@@ -572,318 +579,4 @@
             document.getElementById('startBtn').addEventListener('click', startGame);
             document.getElementById('resetBtn').addEventListener('click', resetGame);
             document.getElementById('respondBtn').addEventListener('click', respond);
-            document.getElementById('playerSelect').addEventListener('change', selectPlayer);
-            document.getElementById('hostBtn').addEventListener('click', () => setMode('host'));
-            document.getElementById('playerBtn').addEventListener('click', () => setMode('player'));
-            
-            // 初始化WebSocket连接
-            initWebSocket();
-            
-            // 显示房间信息
-            document.getElementById('serverUrl').textContent = WS_SERVER;
-            document.getElementById('roomId').textContent = systemState.roomId;
-            
-            // 生成二维码
-            generateQRCode();
-        }
-        
-        // 生成房间ID
-        function generateRoomId() {
-            return 'room-' + Math.floor(10000 + Math.random() * 90000);
-        }
-        
-        // 生成二维码
-        function generateQRCode() {
-            const qrData = JSON.stringify({
-                server: WS_SERVER,
-                room: systemState.roomId
-            });
-            
-            QRCode.toCanvas(document.getElementById('qrcode'), qrData, {
-                width: 150,
-                margin: 1,
-                color: {
-                    dark: '#000',
-                    light: '#fff'
-                }
-            }, function (error) {
-                if (error) console.error('生成二维码失败:', error);
-            });
-        }
-        
-        // 初始化WebSocket连接
-        function initWebSocket() {
-            ws = new WebSocket(WS_SERVER);
-            
-            ws.addEventListener('open', () => {
-                console.log("WebSocket连接已建立");
-                updateConnectionStatus(true);
-                
-                // 发送加入房间消息
-                ws.send(JSON.stringify({
-                    type: 'join',
-                    room: systemState.roomId,
-                    isHost: systemState.mode === 'host'
-                }));
-            });
-            
-            ws.addEventListener('message', (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    handleWebSocketMessage(data);
-                } catch (e) {
-                    console.error("解析消息失败:", e);
-                }
-            });
-            
-            ws.addEventListener('error', (error) => {
-                console.error("WebSocket错误:", error);
-                updateConnectionStatus(false);
-            });
-            
-            ws.addEventListener('close', () => {
-                console.log("WebSocket连接已关闭");
-                updateConnectionStatus(false);
-                // 尝试重新连接
-                setTimeout(initWebSocket, 3000);
-            });
-        }
-        
-        // 处理WebSocket消息
-        function handleWebSocketMessage(data) {
-            if (data.type === 'state') {
-                // 更新系统状态
-                systemState.isStarted = data.isStarted;
-                systemState.winner = data.winner;
-                systemState.players = data.players;
-                systemState.mode = data.mode;
-                
-                // 更新UI
-                updateUI();
-            } else if (data.type === 'response') {
-                // 处理选手抢答
-                if (isHost && !systemState.winner) {
-                    systemState.winner = data.playerId;
-                    systemState.players[data.playerId - 1] = true;
-                    broadcastState();
-                }
-            }
-        }
-        
-        // 广播状态
-        function broadcastState() {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'state',
-                    room: systemState.roomId,
-                    isStarted: systemState.isStarted,
-                    winner: systemState.winner,
-                    players: systemState.players,
-                    mode: systemState.mode
-                }));
-            }
-            updateUI();
-        }
-        
-        // 更新连接状态显示
-        function updateConnectionStatus(isConnected) {
-            const statusElements = document.querySelectorAll('#connectionStatus, #playerConnectionStatus');
-            const badgeElements = document.querySelectorAll('#connectionBadge, #playerConnectionBadge');
-            
-            statusElements.forEach(el => {
-                el.textContent = isConnected ? '已连接到服务器' : '连接失败';
-                el.style.color = isConnected ? '#2ecc71' : '#e74c3c';
-            });
-            
-            badgeElements.forEach(el => {
-                el.textContent = isConnected ? '在线' : '离线';
-                el.className = isConnected ? 'status-badge status-connected' : 'status-badge status-disconnected';
-            });
-        }
-
-        // 生成选手卡片
-        function generatePlayerCards() {
-            const container = document.getElementById('playersContainer');
-            container.innerHTML = '';
-            
-            for (let i = 1; i <= 8; i++) {
-                const playerCard = document.createElement('div');
-                playerCard.className = 'player-card';
-                playerCard.id = `player-${i}`;
-                playerCard.setAttribute('data-player-id', i);
-                playerCard.innerHTML = `
-                    <div class="player-number">${i}</div>
-                    <div class="player-name">选手 ${i}</div>
-                    <div class="player-status">等待</div>
-                `;
-                container.appendChild(playerCard);
-            }
-        }
-
-        // 设置模式
-        function setMode(mode) {
-            systemState.mode = mode;
-            isHost = mode === 'host';
-            
-            if (mode === 'host') {
-                document.getElementById('hostPanel').style.display = 'block';
-                document.getElementById('playerPanel').style.display = 'none';
-                document.getElementById('hostBtn').classList.add('active');
-                document.getElementById('playerBtn').classList.remove('active');
-            } else {
-                document.getElementById('hostPanel').style.display = 'none';
-                document.getElementById('playerPanel').style.display = 'block';
-                document.getElementById('hostBtn').classList.remove('active');
-                document.getElementById('playerBtn').classList.add('active');
-                
-                // 重置选手选择
-                document.getElementById('playerSelect').value = '';
-                document.getElementById('playerResultDisplay').textContent = '请选择您的选手号';
-                document.getElementById('respondBtn').disabled = true;
-                systemState.currentPlayerId = null;
-            }
-            
-            // 广播状态
-            broadcastState();
-        }
-
-        // 开始游戏
-        function startGame() {
-            if (systemState.isStarted) return;
-            
-            systemState.isStarted = true;
-            systemState.winner = null;
-            systemState.players = Array(8).fill(false);
-            
-            // 广播状态
-            broadcastState();
-        }
-
-        // 重置游戏
-        function resetGame() {
-            systemState.isStarted = false;
-            systemState.winner = null;
-            systemState.players = Array(8).fill(false);
-            
-            // 广播状态
-            broadcastState();
-        }
-
-        // 选手抢答
-        function respond() {
-            if (!systemState.currentPlayerId || !systemState.isStarted || systemState.winner) return;
-            
-            // 发送抢答消息
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'response',
-                    room: systemState.roomId,
-                    playerId: systemState.currentPlayerId
-                }));
-            }
-        }
-
-        // 选择选手
-        function selectPlayer(event) {
-            const playerId = parseInt(event.target.value);
-            systemState.currentPlayerId = playerId;
-            
-            if (playerId) {
-                document.getElementById('playerResultDisplay').textContent = `已选择: 选手 ${playerId}`;
-                document.getElementById('respondBtn').disabled = !systemState.isStarted;
-            } else {
-                document.getElementById('playerResultDisplay').textContent = '请选择您的选手号';
-                document.getElementById('respondBtn').disabled = true;
-            }
-        }
-
-        // 更新UI
-        function updateUI() {
-            // 更新模式显示
-            if (systemState.mode === 'host') {
-                document.getElementById('hostPanel').style.display = 'block';
-                document.getElementById('playerPanel').style.display = 'none';
-                document.getElementById('hostBtn').classList.add('active');
-                document.getElementById('playerBtn').classList.remove('active');
-            } else {
-                document.getElementById('hostPanel').style.display = 'none';
-                document.getElementById('playerPanel').style.display = 'block';
-                document.getElementById('hostBtn').classList.remove('active');
-                document.getElementById('playerBtn').classList.add('active');
-            }
-            
-            // 更新主持人界面
-            if (systemState.isStarted) {
-                if (systemState.winner) {
-                    document.getElementById('resultDisplay').innerHTML = `
-                        <div>
-                            <i class="fas fa-trophy"></i> 选手 ${systemState.winner} 抢答成功!
-                        </div>
-                    `;
-                    document.getElementById('resultDisplay').className = 'result-display winner';
-                } else {
-                    document.getElementById('resultDisplay').textContent = '抢答进行中...';
-                    document.getElementById('resultDisplay').className = 'result-display';
-                }
-            } else {
-                document.getElementById('resultDisplay').textContent = '比赛准备中...';
-                document.getElementById('resultDisplay').className = 'result-display';
-            }
-            
-            // 更新选手卡片
-            for (let i = 1; i <= 8; i++) {
-                const playerCard = document.getElementById(`player-${i}`);
-                const statusElement = playerCard.querySelector('.player-status');
-                
-                playerCard.classList.remove('active', 'winner');
-                
-                if (systemState.players[i-1]) {
-                    playerCard.classList.add('active');
-                    statusElement.textContent = '已抢答';
-                    
-                    if (systemState.winner === i) {
-                        playerCard.classList.add('winner');
-                        statusElement.textContent = '抢答成功!';
-                    }
-                } else {
-                    statusElement.textContent = systemState.isStarted ? '等待抢答' : '等待';
-                }
-            }
-            
-            // 更新选手界面
-            if (systemState.mode === 'player') {
-                if (systemState.winner) {
-                    if (systemState.currentPlayerId === systemState.winner) {
-                        document.getElementById('playerResultDisplay').innerHTML = `
-                            <div>
-                                <i class="fas fa-trophy"></i> 恭喜! 您抢答成功!
-                            </div>
-                        `;
-                        document.getElementById('playerResultDisplay').className = 'result-display winner';
-                    } else {
-                        document.getElementById('playerResultDisplay').innerHTML = `
-                            <div>
-                                <i class="fas fa-bolt"></i> 选手 ${systemState.winner} 抢答成功!
-                            </div>
-                        `;
-                        document.getElementById('playerResultDisplay').className = 'result-display';
-                    }
-                } else if (systemState.isStarted) {
-                    document.getElementById('playerResultDisplay').textContent = '可以抢答';
-                    document.getElementById('playerResultDisplay').className = 'result-display';
-                }
-                
-                document.getElementById('respondBtn').disabled = !systemState.isStarted || !!systemState.winner;
-            }
-        }
-
-        // 页面加载完成后初始化系统
-        window.addEventListener('DOMContentLoaded', initSystem);
-        
-        // 清理WebSocket连接
-        window.addEventListener('beforeunload', () => {
-            if (ws) ws.close();
-        });
-    </script>
-</body>
-</html>
+           
